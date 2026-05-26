@@ -7,16 +7,6 @@ interface UseConflictHelpersOptions {
   remoteResolver?: ConflictRemoteResolver;
 }
 
-/**
- * High-level hook konfliktien käsittelyyn.
- *
- * Tämä hook kapseloi:
- * - konfliktien haun
- * - yleisimmät resoluutiostrategiat
- * - yksinkertaisen API:n UI:lle
- *
- * Tarkoitettu suoraan sovelluskäyttöön.
- */
 export function useConflictHelpers(options: UseConflictHelpersOptions = {}) {
   const {
     conflicts,
@@ -27,9 +17,6 @@ export function useConflictHelpers(options: UseConflictHelpersOptions = {}) {
     markResolved,
   } = useSyncConflicts(options);
 
-  /**
-   * Yleinen resolve-funktio strategialla
-   */
   const resolve = useCallback(
     async (
       conflict: SyncConflictForResolution,
@@ -60,27 +47,18 @@ export function useConflictHelpers(options: UseConflictHelpersOptions = {}) {
     ],
   );
 
-  /**
-   * Helper: server-wins
-   */
   const resolveServer = useCallback(
     (conflict: SyncConflictForResolution) =>
       resolveServerWins(conflict),
     [resolveServerWins],
   );
 
-  /**
-   * Helper: client-wins
-   */
   const resolveClient = useCallback(
     (conflict: SyncConflictForResolution) =>
       resolveClientWins(conflict),
     [resolveClientWins],
   );
 
-  /**
-   * Helper: manual merge
-   */
   const merge = useCallback(
     (
       conflict: SyncConflictForResolution,
@@ -89,9 +67,6 @@ export function useConflictHelpers(options: UseConflictHelpersOptions = {}) {
     [resolveManualMerge],
   );
 
-  /**
-   * Helper: ignore conflict
-   */
   const ignore = useCallback(
     (conflict: SyncConflictForResolution) =>
       markResolved(conflict),

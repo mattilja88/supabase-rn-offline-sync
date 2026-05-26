@@ -1,50 +1,50 @@
 # offlineSync
 
-Offline-first-paketti React Native ja Expo -sovelluksille. Tarjoaa paikallisen 
-SQLite-tallennuksen ja automaattisen synkronoinnin Supabaseen.
+Offline-first package for React Native and Expo applications. Provides local 
+SQLite storage and automatic synchronization with Supabase.
 
-## Ominaisuudet
+## Features
 
-- SQLite paikallisena tietokantana
-- Automaattinen synkronointi verkkoyhteyden palautuessa
-- Soft delete -tuki
-- Versionumeroihin perustuva konfliktien tunnistus
-- Kolme konfliktinratkaisustrategiaa: server-wins, client-wins, manual-merge
-- React-hookit (`useOfflineFirst`, `useSyncConflicts`)
+- SQLite as the local database
+- Automatic synchronization when network connectivity is restored
+- Soft delete support
+- Version-based conflict detection
+- Three conflict resolution strategies: server-wins, client-wins, manual-merge
+- React hooks (`useOfflineFirst`, `useSyncConflicts`)
 
-## Asennus
+## Installation
 
 \`\`\`bash
-npm install @sinunpakettisi/offline-sync
+npm install supabase-rn-offline-sync
 \`\`\`
 
-## Pikaopas
+## Quick start
 
 \`\`\`tsx
-import { OfflineSyncProvider, useOfflineFirst } from "@TODO;KEKSI NIMI PAKETILLE/offline-sync";
+import { OfflineSyncProvider, useOfflineFirst } from "supabase-rn-offline-sync";
 
-// 1. Kääri sovellus Providerilla
+// 1. Wrap your app with the Provider
 <OfflineSyncProvider supabaseClient={supabase} tables={tables}>
   <App />
 </OfflineSyncProvider>
 
-// 2. Käytä hookia komponentissa
+// 2. Use the hook in your components
 const { data, create, update, remove } = useOfflineFirst({ 
   table: "tasks" 
 });
 \`\`\`
 
-## Dokumentaatio
+## Documentation
 
-- [Käyttöopas](docs/offline-sync-guide.md) — asennus ja ensimmäinen käyttö
+- [Developer Guide](docs/offline-sync-guide.md) — installation and getting started
 
-## Vaatimukset
+## Requirements
 
 - React Native 0.72+
 - Expo 50+
 - expo-sqlite
 - Supabase JS Client
 
-## Lisenssi
+## License
 
 MIT

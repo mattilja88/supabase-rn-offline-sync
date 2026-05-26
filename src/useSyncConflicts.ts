@@ -29,18 +29,6 @@ interface UseSyncConflictsResult {
   resetRetry: (conflict: SyncConflictForResolution) => Promise<void>;
 }
 
-/**
- * Hook synkronointikonfliktien hakemiseen ja ratkaisemiseen.
- *
- * Hook kapseloi konfliktien käsittelyn sovellustasolle:
- * - hakee pending-tilassa olevat konfliktit,
- * - palauttaa konfliktien määrän,
- * - tarjoaa valmiit apufunktiot eri ratkaisustrategioille,
- * - päivittää konfliktit automaattisesti ratkaisun jälkeen.
- *
- * remoteResolver on pakollinen client-wins- ja manual-merge-strategioille,
- * koska ne lähettävät ratkaisun palvelimelle.
- */
 export function useSyncConflicts(
   options: UseSyncConflictsOptions = {},
 ): UseSyncConflictsResult {
@@ -51,10 +39,7 @@ export function useSyncConflicts(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  /**
-   * Hakee ratkaisemattomat konfliktit paikallisesta sync_conflicts-taulusta.
-   * Jos table on annettu, palautetaan vain kyseisen taulun konfliktit.
-   */
+
   const refetchConflicts = useCallback(async () => {
     if (!db) return;
 
@@ -75,10 +60,6 @@ export function useSyncConflicts(
     }
   }, [db, table]);
 
-  /**
-   * Yleinen sisäinen apufunktio konfliktin ratkaisemiseen.
-   * Päivittää konfliktien listan ratkaisun jälkeen.
-   */
   const resolveWithStrategy = useCallback(
     async (
       conflict: SyncConflictForResolution,
@@ -112,10 +93,6 @@ export function useSyncConflicts(
     [db, remoteResolver, refetchConflicts],
   );
 
-  /**
-   * Ratkaisee konfliktin hyväksymällä palvelimen version.
-   * Tämä ei vaadi remoteResolveria, koska remote_payload on jo tallennettu konfliktiin.
-   */
   const resolveServerWins = useCallback(
     async (conflict: SyncConflictForResolution) => {
       await resolveWithStrategy(conflict, "server-wins");
@@ -123,10 +100,6 @@ export function useSyncConflicts(
     [resolveWithStrategy],
   );
 
-  /**
-   * Ratkaisee konfliktin hyväksymällä paikallisen version.
-   * Tämä vaatii remoteResolverin, jotta paikallinen versio voidaan viedä palvelimelle.
-   */
   const resolveClientWins = useCallback(
     async (conflict: SyncConflictForResolution) => {
       if (!remoteResolver) {
@@ -140,10 +113,6 @@ export function useSyncConflicts(
     [remoteResolver, resolveWithStrategy],
   );
 
-  /**
-   * Ratkaisee konfliktin käyttämällä sovelluksen muodostamaa yhdistettyä payloadia.
-   * Tämä vaatii remoteResolverin, koska yhdistetty versio lähetetään palvelimelle.
-   */
   const resolveManualMerge = useCallback(
     async (
       conflict: SyncConflictForResolution,
@@ -154,10 +123,6 @@ export function useSyncConflicts(
     [resolveWithStrategy],
   );
 
-  /**
-   * Merkitsee konfliktin ratkaistuksi ilman datamuutoksia.
-   * Tätä kannattaa käyttää vain poikkeustilanteissa tai debug-käytössä.
-   */
   const markResolved = useCallback(
     async (conflict: SyncConflictForResolution) => {
       await resolveWithStrategy(conflict, "mark-resolved");
@@ -165,10 +130,6 @@ export function useSyncConflicts(
     [resolveWithStrategy],
   );
 
-  /**
-   * Nollaa konfliktin retry-tiedot ja hakee konfliktit uudelleen.
-   * Tämän avulla käyttäjä voi yrittää epäonnistuneen konfliktin ratkaisua heti uudestaan.
-   */
   const resetRetry = useCallback(
     async (conflict: SyncConflictForResolution) => {
       if (!db) return;
@@ -193,10 +154,6 @@ export function useSyncConflicts(
     [db, refetchConflicts],
   );
 
-  /**
-   * Hakee konfliktit automaattisesti, kun hook otetaan käyttöön
-   * tai kun taulu vaihtuu.
-   */
   useEffect(() => {
     refetchConflicts();
   }, [refetchConflicts]);

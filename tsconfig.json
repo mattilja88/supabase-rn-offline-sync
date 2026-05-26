@@ -1,20 +1,19 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "CommonJS",
+    "target": "ES2020",
+    "module": "commonjs",
+    "lib": ["ES2020"],
+    "jsx": "react",
     "declaration": true,
-    "outDir": "dist",
-    "rootDir": "src",
+    "declarationMap": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
-    "jsx": "react-jsx",
     "skipLibCheck": true,
-    "types": [
-      "jest"
-    ]
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true
   },
-  "include": [
-    "src"
-  ],
-  "extends": "expo/tsconfig.base"
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*__tests__/*"]
 }

@@ -1,9 +1,5 @@
 import type { SQLiteDatabase } from "expo-sqlite";
 
-/**
- * Lisää uuden rivin paikalliseen SQLite-tietokantaan.
- * Funktio suodattaa datasta pois tuntemattomat sarakkeet ja merkitsee rivin synkronoimattomaksi.
- */
 export async function insertLocal(
   db: SQLiteDatabase,
   table: string,
@@ -36,10 +32,6 @@ export async function insertLocal(
   );
 }
 
-/**
- * Hakee rivejä paikallisesta tietokannasta annetusta taulusta.
- * Oletuksena soft delete -rivit piilotetaan, mutta ne voidaan hakea mukaan includeDeleted-asetuksella.
- */
 export async function queryLocal<T>(
   db: SQLiteDatabase,
   table: string,
@@ -84,10 +76,6 @@ export async function queryLocal<T>(
   return await db.getAllAsync<T>(sql);
 }
 
-/**
- * Päivittää paikallisen rivin ja merkitsee sen synkronoimattomaksi.
- * Päivitykseen lisätään automaattisesti uusi updated_at-aikaleima.
- */
 export async function updateLocal(
   db: SQLiteDatabase,
   table: string,
@@ -122,10 +110,6 @@ export async function updateLocal(
   await db.runAsync(`UPDATE ${table} SET ${setClauses} WHERE id = ?`, values);
 }
 
-/**
- * Toteuttaa paikallisen soft deleten eli merkitsee rivin poistetuksi deleted_at-kentällä.
- * Rivi jätetään tietokantaan, jotta poistomuutos voidaan synkronoida myöhemmin palvelimelle.
- */
 export async function deleteLocal(
   db: SQLiteDatabase,
   table: string,
@@ -143,16 +127,8 @@ export async function deleteLocal(
   );
 }
 
-/**
- * Välimuisti taulujen sarakkeille, jotta PRAGMA table_info -kyselyä ei tarvitse tehdä jokaisessa operaatiossa.
- * Tämä nopeuttaa paikallisia insert-, update- ja upsert-operaatioita.
- */
 const tableColumnsCache: Record<string, string[]> = {};
 
-/**
- * Hakee SQLite-taulun sarakenimet ja tallentaa ne välimuistiin.
- * Saraketietoja käytetään tuntemattomien kenttien suodattamiseen ennen SQL-kyselyitä.
- */
 async function getTableColumns(
   db: SQLiteDatabase,
   table: string,
@@ -165,10 +141,6 @@ async function getTableColumns(
   return tableColumnsCache[table];
 }
 
-/**
- * Lisää tai korvaa palvelimelta saadun rivin paikalliseen SQLite-tietokantaan.
- * Rivi merkitään synkronoiduksi, koska sen oletetaan vastaavan palvelimen tilaa.
- */
 export async function upsertFromRemote(
   db: SQLiteDatabase,
   table: string,

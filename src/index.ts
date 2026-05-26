@@ -25,7 +25,6 @@ export type {
   ConflictRemoteResolver,
 } from "./conflictResolution";
 
-// Tyypit
 export type { TableDefinition } from "./provider";
 
 export { useSyncConflicts } from "./useSyncConflicts";

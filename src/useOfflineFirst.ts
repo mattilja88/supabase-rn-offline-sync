@@ -14,10 +14,6 @@ import * as Crypto from "expo-crypto";
 type SyncState = "idle" | "syncing" | "offline" | "error" | "conflict";
 export type ConflictStrategy = "manual" | "client-wins" | "server-wins";
 
-/**
- * Hakee paikallisen rivin nykyisen versionumeron ennen muutoksen jonottamista.
- * Tätä versiota käytetään myöhemmin konfliktien tunnistamiseen synkronoinnissa.
- */
 async function getLocalRowVersion(
   db: any,
   table: string,
@@ -39,10 +35,6 @@ interface UseOfflineFirstOptions {
   conflictStrategy?: ConflictStrategy;
 }
 
-/**
- * Pääasiallinen hook offline-first-datan lukemiseen, muokkaamiseen ja synkronointiin.
- * Hook käyttää SQLiteä ensisijaisena tietolähteenä ja jonottaa muutokset myöhempää Supabase-synkronointia varten.
- */
 export function useOfflineFirst<T extends { id: string }>(
   options: UseOfflineFirstOptions,
 ) {
@@ -67,10 +59,6 @@ export function useOfflineFirst<T extends { id: string }>(
   const lastSyncRef = useRef<string | null>(null);
   const isSyncingRef = useRef(false);
 
-  /**
-   * Lukee taulun datan paikallisesta SQLite-tietokannasta ja päivittää hookin tilan.
-   * Samalla päivitetään odottavien muutosten ja ratkaisemattomien konfliktien määrät käyttöliittymää varten.
-   */
   const fetchLocal = useCallback(async () => {
     if (!db) return;
     try {
@@ -92,10 +80,6 @@ export function useOfflineFirst<T extends { id: string }>(
     }
   }, [db, table, orderBy, ascending]);
 
-  /**
-   * Synkronoi yhden taulun paikalliset muutokset Supabaseen ja hakee palvelimen muutokset takaisin SQLiteen.
-   * Funktio estää päällekkäiset synkronoinnit ja päivittää syncState-tilan onnistumisen, virheen tai konfliktin mukaan.
-   */
   const sync = useCallback(async () => {
     if (!db || !supabaseClient || isSyncingRef.current) return;
 
@@ -160,10 +144,6 @@ export function useOfflineFirst<T extends { id: string }>(
     conflictStrategy,
   ]);
 
-  /**
-   * Luo uuden rivin ensin paikalliseen SQLiteen ja lisää INSERT-operaation synkronointijonoon.
-   * Käyttöliittymä päivittyy heti paikallisen datan perusteella, ja synkronointi käynnistyy taustalla jos verkko on käytettävissä.
-   */
   const create = useCallback(
     async (item: Omit<T, "id" | "created_at" | "updated_at">) => {
       if (!db) return null;
@@ -205,10 +185,6 @@ export function useOfflineFirst<T extends { id: string }>(
     [db, table, fetchLocal, isOnline, sync],
   );
 
-  /**
-   * Päivittää rivin paikallisesti ja lisää UPDATE-operaation synkronointijonoon.
-   * Ennen muutosta talletetaan rivin base_version, jotta myöhempi synkronointi voi havaita konfliktit.
-   */
   const update = useCallback(
     async (id: string, changes: Partial<T>) => {
       if (!db) return;
@@ -254,10 +230,6 @@ export function useOfflineFirst<T extends { id: string }>(
     [db, table, fetchLocal, isOnline, sync],
   );
 
-  /**
-   * Poistaa rivin paikallisesti soft deletenä ja lisää DELETE-operaation synkronointijonoon.
-   * Riviä ei poisteta heti fyysisesti, jotta poistomuutos voidaan välittää hallitusti palvelimelle.
-   */
   const remove = useCallback(
     async (id: string) => {
       if (!db) return;
@@ -290,10 +262,6 @@ export function useOfflineFirst<T extends { id: string }>(
     [db, table, fetchLocal, isOnline, sync],
   );
 
-  /**
-   * Kuuntelee verkkoyhteyden muutoksia ja käynnistää synkronoinnin, kun yhteys palautuu.
-   * Tämä mahdollistaa offline-tilassa tehtyjen muutosten lähettämisen automaattisesti myöhemmin.
-   */
   useEffect(() => {
     const unsubscribe = onNetworkChange((connected) => {
       setIsOnline(connected);
@@ -304,10 +272,6 @@ export function useOfflineFirst<T extends { id: string }>(
     return () => unsubscribe();
   }, [sync, table]);
 
-  /**
-   * Alustaa hookin lukemalla paikallisen datan ja yrittämällä ensimmäistä synkronointia.
-   * Paikallinen data näytetään ensin, jotta sovellus toimii nopeasti myös ilman verkkoyhteyttä.
-   */
   useEffect(() => {
     const init = async () => {
       setLoading(true);

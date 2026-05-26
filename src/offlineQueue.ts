@@ -9,19 +9,13 @@ export interface QueueItem {
   table_name: string;
   operation: QueueOperation;
 
-  // Vanha JSON-kenttä, joka säilytetään taaksepäin yhteensopivuuden vuoksi.
-  // Uudempi toteutus käyttää ensisijaisesti payload-kenttää.
   data: string | null;
 
-  // Tuotantotason synkronoinnin kentät, joiden avulla tunnistetaan rivi, alkuperäinen versio ja yksittäinen operaatio.
-  // Näitä käytetään konfliktien tunnistukseen, idempotenssiin ja jonon tiivistämiseen.
   row_id: string | null;
   payload: string | null;
   base_version: number | null;
   client_operation_id: string | null;
 
-  // Retry/backoff-kentät epäonnistuneiden synkronointiyritysten hallintaan.
-  // Näiden avulla samaa operaatiota ei yritetä jatkuvasti uudelleen liian tiheästi.
   attempts: number;
   last_error: string | null;
   next_retry_at: string | null;
@@ -47,10 +41,6 @@ export interface SyncConflict {
   resolved_at: string | null;
 }
 
-/**
- * Luo paikallisen konfliktitaulun, johon tallennetaan synkronoinnissa havaitut ristiriidat.
- * Taulu mahdollistaa sen, että dataa ei ylikirjoiteta hiljaisesti, vaan konflikti voidaan ratkaista myöhemmin.
- */
 export async function initConflicts(db: SQLiteDatabase): Promise<void> {
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS sync_conflicts (
@@ -96,10 +86,6 @@ async function addConflictColumnIfMissing(
   }
 }
 
-/**
- * Tallentaa havaitun konfliktin paikalliseen sync_conflicts-tauluun.
- * Mukaan tallennetaan sekä paikallinen muutos että palvelimen versio, jotta käyttäjä tai sovellus voi ratkaista ristiriidan myöhemmin.
- */
 export async function addConflict(
   db: SQLiteDatabase,
   conflict: {
@@ -148,11 +134,6 @@ export async function addConflict(
   );
 }
 
-/**
- * Hakee ratkaisemattomat konfliktit joko kaikista tauluista tai yhdestä tietystä taulusta.
- * Pending-konfliktit palautetaan aina.
- * Failed-konfliktit palautetaan vasta, kun niiden next_retry_at on saavutettu.
- */
 export async function getConflicts(
   db: SQLiteDatabase,
   table?: string,
@@ -187,10 +168,6 @@ export async function getConflicts(
   );
 }
 
-/**
- * Merkitsee konfliktin ratkaisuun meneväksi.
- * Nollaa virheen ja retry-ajankohdan, koska käsittelyä yritetään juuri nyt.
- */
 export async function markConflictResolving(
   db: SQLiteDatabase,
   conflictId: number,
@@ -207,9 +184,6 @@ export async function markConflictResolving(
   );
 }
 
-/**
- * Merkitsee konfliktin ratkaistuksi ja nollaa retry-tiedot.
- */
 export async function markConflictResolved(
   db: SQLiteDatabase,
   conflictId: number,
@@ -229,11 +203,6 @@ export async function markConflictResolved(
   );
 }
 
-/**
- * Merkitsee konfliktin ratkaisuyrityksen epäonnistuneeksi.
- * Backoff kasvaa yritysten määrän mukaan, jotta epäonnistunutta ratkaisua
- * ei yritetä jatkuvasti liian tiheästi uudelleen.
- */
 export async function markConflictFailed(
   db: SQLiteDatabase,
   conflictId: number,
@@ -263,10 +232,6 @@ export async function markConflictFailed(
   );
 }
 
-/**
- * Nollaa konfliktin retry-tiedot ja palauttaa sen pending-tilaan.
- * Tätä voidaan käyttää, jos käyttäjä haluaa yrittää ratkaisua heti uudelleen.
- */
 export async function resetConflictRetry(
   db: SQLiteDatabase,
   conflictId: number,
@@ -282,10 +247,6 @@ export async function resetConflictRetry(
   );
 }
 
-/**
- * Lisää sync_queue-tauluun uuden sarakkeen vain, jos sitä ei ole vielä olemassa.
- * Tätä käytetään turvallisiin migraatioihin, jotta vanhat paikalliset tietokannat eivät rikkoudu päivityksessä.
- */
 async function addQueueColumnIfMissing(
   db: SQLiteDatabase,
   columnName: string,
@@ -304,10 +265,6 @@ async function addQueueColumnIfMissing(
   }
 }
 
-/**
- * Luo synkronointijonon ja tekee tarvittavat migraatiot vanhoihin tietokantoihin.
- * Jono tallentaa paikalliset INSERT-, UPDATE- ja DELETE-operaatiot, jotka lähetetään myöhemmin palvelimelle.
- */
 export async function initQueue(db: SQLiteDatabase): Promise<void> {
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS sync_queue (
@@ -340,10 +297,6 @@ export async function initQueue(db: SQLiteDatabase): Promise<void> {
   await addQueueColumnIfMissing(db, "next_retry_at", "TEXT");
 }
 
-/**
- * Lisää paikallisen muutoksen synkronointijonoon.
- * Funktio tallentaa sekä varsinaisen payloadin että operaation metadataa, kuten rivin id:n, base_versionin ja client_operation_id:n.
- */
 export async function addToQueue(
   db: SQLiteDatabase,
   table: string,
@@ -379,10 +332,6 @@ export async function addToQueue(
   );
 }
 
-/**
- * Hakee synkronointijonosta operaatiot, joita saa yrittää tällä hetkellä synkronoida.
- * Epäonnistuneet operaatiot ohitetaan, kunnes niiden next_retry_at-aika on saavutettu.
- */
 export async function getQueue(
   db: SQLiteDatabase,
   table?: string,
@@ -407,10 +356,6 @@ export async function getQueue(
   );
 }
 
-/**
- * Poistaa onnistuneesti synkronoidun operaation jonosta.
- * Operaatiota ei poisteta ennen kuin palvelin on hyväksynyt muutoksen tai se on käsitelty muuten hallitusti.
- */
 export async function removeFromQueue(
   db: SQLiteDatabase,
   id: number,
@@ -418,10 +363,6 @@ export async function removeFromQueue(
   await db.runAsync("DELETE FROM sync_queue WHERE id = ?", [id]);
 }
 
-/**
- * Palauttaa jonossa olevien operaatioiden kokonaismäärän.
- * Tätä voidaan käyttää esimerkiksi käyttöliittymässä näyttämään odottavien muutosten lukumäärä.
- */
 export async function getQueueCount(db: SQLiteDatabase): Promise<number> {
   const result = await db.getFirstAsync<{ count: number }>(
     "SELECT COUNT(*) as count FROM sync_queue",
@@ -429,18 +370,10 @@ export async function getQueueCount(db: SQLiteDatabase): Promise<number> {
   return result?.count ?? 0;
 }
 
-/**
- * Tyhjentää koko synkronointijonon.
- * Tämä on tarkoitettu lähinnä testaukseen ja debuggaamiseen, ei normaaliksi tuotantokäytöksi.
- */
 export async function clearQueue(db: SQLiteDatabase): Promise<void> {
   await db.runAsync("DELETE FROM sync_queue");
 }
 
-/**
- * Merkitsee jonorivin epäonnistuneeksi ja laskee sille seuraavan retry-ajankohdan.
- * Backoff kasvaa yritysten määrän mukaan, jotta epäonnistunutta operaatiota ei yritetä jatkuvasti uudelleen.
- */
 export async function markQueueItemFailed(
   db: SQLiteDatabase,
   id: number,
@@ -469,10 +402,6 @@ export async function markQueueItemFailed(
   );
 }
 
-/**
- * Nollaa jonorivin retry-tiedot.
- * Tätä voidaan käyttää, jos epäonnistunut operaatio halutaan palauttaa heti uudelleen yritettäväksi.
- */
 export async function resetQueueItemRetry(
   db: SQLiteDatabase,
   id: number,
@@ -487,10 +416,6 @@ export async function resetQueueItemRetry(
   );
 }
 
-/**
- * Lukee jonorivin payloadin riippumatta siitä, onko data tallennettu uuteen payload-kenttään vai vanhaan data-kenttään.
- * Tämä pitää jonon käsittelyn taaksepäin yhteensopivana.
- */
 function parseQueueItemPayload(item: QueueItem): Record<string, any> {
   const rawPayload = item.payload ?? item.data;
 
@@ -501,10 +426,6 @@ function parseQueueItemPayload(item: QueueItem): Record<string, any> {
   return JSON.parse(rawPayload);
 }
 
-/**
- * Tiivistää saman rivin peräkkäisiä jonotettuja operaatioita yhdeksi järkeväksi operaatioksi.
- * Tämä vähentää turhia palvelinkutsuja ja pienentää konfliktien riskiä.
- */
 export async function compactQueue(
   db: SQLiteDatabase,
   table?: string,
@@ -547,14 +468,13 @@ export async function compactQueue(
     const firstPayload = parseQueueItemPayload(first);
     const lastPayload = parseQueueItemPayload(last);
 
-    // Jos rivi luodaan ja poistetaan ennen synkkausta, palvelimelle ei tarvitse lähettää mitään.
     if (first.operation === "INSERT" && last.operation === "DELETE") {
       const ids = items.map((item) => item.id);
       await deleteQueueItems(db, ids);
       continue;
     }
 
-    // Jos uusi rivi luodaan ja sitä muokataan ennen synkkausta, lähetetään yksi INSERT lopullisella datalla.
+
     if (first.operation === "INSERT" && last.operation === "UPDATE") {
       await replaceQueueGroup(db, items, {
         operation: "INSERT",
@@ -567,7 +487,6 @@ export async function compactQueue(
       continue;
     }
 
-    // Useat peräkkäiset päivitykset samalle riville yhdistetään yhdeksi UPDATE-operaatioksi.
     if (first.operation === "UPDATE" && last.operation === "UPDATE") {
       await replaceQueueGroup(db, items, {
         operation: "UPDATE",
@@ -580,7 +499,6 @@ export async function compactQueue(
       continue;
     }
 
-    // Jos viimeinen operaatio on poisto, aiemmat päivitykset voidaan korvata yhdellä DELETE-operaatiolla.
     if (last.operation === "DELETE") {
       await replaceQueueGroup(db, items, {
         operation: "DELETE",
@@ -596,10 +514,6 @@ export async function compactQueue(
   }
 }
 
-/**
- * Poistaa useita jonorivejä yhdellä SQL-kyselyllä.
- * Tätä käytetään erityisesti jonon tiivistämisessä, kun vanhat operaatiot korvataan yhdellä uudella operaatiolla.
- */
 async function deleteQueueItems(
   db: SQLiteDatabase,
   ids: number[],
@@ -614,10 +528,6 @@ async function deleteQueueItems(
   );
 }
 
-/**
- * Korvaa saman rivin useat jonorivit yhdellä uudella tiivistetyllä operaatiolla.
- * Uusi operaatio säilyttää tarvittavat metatiedot, kuten rivin id:n, base_versionin ja client_operation_id:n.
- */
 async function replaceQueueGroup(
   db: SQLiteDatabase,
   items: QueueItem[],

@@ -5,16 +5,6 @@ interface SupabaseConflictResolverOptions {
   rpcPrefix?: string;
 }
 
-/**
- * Luo Supabase-pohjaisen remoteResolverin konfliktien ratkaisuun.
- *
- * Resolver kutsuu taulukohtaista RPC-funktiota muodossa:
- * force_sync_update_<table>
- *
- * Esimerkiksi:
- * table = "events"
- * → force_sync_update_events
- */
 export function createSupabaseConflictResolver(
   supabase: SupabaseClient,
   options: SupabaseConflictResolverOptions = {},

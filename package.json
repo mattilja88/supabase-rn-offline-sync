@@ -1,19 +1,46 @@
 {
-  "name": "@oppari/offline-sync",
-  "version": "0.1.0",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "name": "supabase-rn-offline-sync",
+  "version": "1.0.0",
+  "description": "Offline-first synchronization library for React Native and Supabase",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "test": "jest"
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "react-native",
+    "offline-first",
+    "supabase",
+    "sqlite",
+    "sync",
+    "expo"
+  ],
+  "contributors": [
+    "Jaakko Mattila",
+    "Juho Kultala",
+    "Taneli Lesell"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mattilja88/supabase-rn-offline-sync.git"
   },
   "peerDependencies": {
-    "@react-native-community/netinfo": ">=11.0.0",
-    "@supabase/supabase-js": ">=2.0.0",
-    "expo-sqlite": ">=14.0.0"
+    "react": ">=18.0.0",
+    "react-native": ">=0.72.0",
+    "expo-sqlite": ">=14.0.0",
+    "@supabase/supabase-js": ">=2.39.0",
+    "expo-crypto": ">=13.0.0"
   },
   "devDependencies": {
-    "@types/jest": "^30.0.0",
-    "jest": "^30.3.0",
-    "ts-jest": "^29.4.9"
+    "typescript": "^5.0.0",
+    "@types/react": "^18.0.0"
   }
 }

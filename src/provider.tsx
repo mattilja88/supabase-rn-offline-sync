@@ -26,10 +26,6 @@ const OfflineSyncContext = createContext<OfflineSyncContextType>({
   isReady: false,
 });
 
-/**
- * Palauttaa offline-sync-kontekstin, jonka kautta paketin hookit ja funktiot pääsevät käsiksi SQLiteen ja Supabaseen.
- * Jos provider ei ole vielä valmis, funktio varoittaa kehittäjää puuttuvasta tai keskeneräisestä alustuksesta.
- */
 export function useOfflineContext() {
   const context = useContext(OfflineSyncContext);
   if (!context.db) {
@@ -38,10 +34,6 @@ export function useOfflineContext() {
   return context;
 }
 
-/**
- * Lisää tauluun sarakkeen vain, jos sitä ei ole vielä olemassa.
- * Tätä käytetään turvallisiin paikallisiin migraatioihin, jotta vanhat tietokannat voidaan päivittää rikkomatta olemassa olevaa dataa.
- */
 async function addColumnIfMissing(
   database: SQLite.SQLiteDatabase,
   tableName: string,
@@ -61,10 +53,6 @@ async function addColumnIfMissing(
   }
 }
 
-/**
- * Lisää synkronoinnin tarvitsemat metadata-sarakkeet paikalliseen tauluun.
- * Metadataa käytetään muun muassa soft deleteen, konfliktien tunnistukseen ja paikallisten muutosten synkronointitilaan.
- */
 async function migrateOfflineTable(
   database: SQLite.SQLiteDatabase,
   tableName: string,
@@ -87,10 +75,6 @@ async function migrateOfflineTable(
   );
 }
 
-/**
- * Alustaa paikallisen SQLite-tietokannan, sovelluksen määrittelemät taulut sekä synkronointiin liittyvät apurakenteet.
- * Provider jakaa tietokannan ja Supabase-clientin React Contextin kautta kaikille paketin käyttäville komponenteille.
- */
 export function OfflineSyncProvider({
   supabaseClient,
   tables,

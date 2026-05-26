@@ -1,313 +1,283 @@
-# Offline Sync -paketin käyttöohje
+# offline-sync — Developer Guide
 
-Tämä dokumentti selittää, miten `offlineSync`-pakettia käytetään sovelluksessa. Paketti tarjoaa offline-first-arkkitehtuurin React Native / Expo -sovellukselle, jossa:
+This guide explains how to use `offline-sync` in your React Native / Expo application. The library provides an offline-first architecture where:
 
-- SQLite toimii ensisijaisena tietolähteenä  
-- Supabase toimii synkronointikerroksena  
+- SQLite acts as the primary data source
+- Supabase serves as the synchronization layer
 
----
+## How it works
 
-## 1. Paketin perusidea
+1. Data is always read from the local SQLite database
+2. User changes are saved locally first
+3. Changes are added to a `sync_queue`
+4. When online, changes are pushed to Supabase
+5. New changes from Supabase are pulled back to SQLite
+6. Any conflicts are stored separately for resolution
 
-Paketti toimii seuraavalla mallilla:
+This means your application works fully offline with no perceived latency.
 
-1. Data luetaan aina paikallisesta SQLite-tietokannasta  
-2. Käyttäjän muutokset tallennetaan heti paikallisesti  
-3. Muutokset lisätään `sync_queue`-jonoon  
-4. Online-tilassa muutokset pusketaan Supabaseen  
-5. Supabasesta haetaan uudet muutokset takaisin SQLiteen  
-6. Mahdolliset ristiriidat tallennetaan konflikteina  
+## Main components
 
-👉 Sovellus toimii täysin offline-tilassa ilman viivettä.
+### `OfflineSyncProvider`
+Initializes the SQLite database, creates tables and migrations, and exposes the database and Supabase client through React Context.
 
----
+### `useOfflineFirst`
+The primary hook for application code. Provides CRUD operations, sync controls, and synchronization state.
 
-## 2. Pääkomponentit
+### `useSyncConflicts`
+Hook for managing conflicts. Provides resolution strategies and conflict state.
 
-### OfflineSyncProvider
-- Luo SQLite-tietokannan  
-- Luo taulut ja migraatiot  
-- Luo `sync_queue` ja `sync_conflicts`  
-- Jakaa db:n ja Supabase-clientin Contextin kautta  
+### `useConflictHelpers`
+UI-friendly API for common conflict resolution patterns.
 
-### useOfflineFirst
-- Pääasiallinen hook sovellukselle  
-- CRUD + sync  
-- Palauttaa synkronoinnin tilan  
-
-### localDatabase.ts
-- SQLite CRUD-operaatiot  
-- `upsertFromRemote` (server → local)
-
-### offlineQueue.ts
-- `sync_queue` (push)  
-- `sync_conflicts` (conflict storage)  
-- retry/backoff  
-- queue compaction  
-
-### syncEngine.ts
-- push (local → server)  
-- pull (server → local)  
-- konfliktien tunnistus  
-
-### conflictResolution.ts
-- konfliktien ratkaisu  
-
-### useSyncConflicts
-- konfliktien hallinta  
-
-### useConflictHelpers
-- UI-ystävällinen API konflikteille  
-
----
-
-## 3. Providerin käyttöönotto
+## Setting up the Provider
 
 ```tsx
-<OfflineSyncProvider
-  supabaseClient={supabase}
-  tables={tables}
->
-  <App />
-</OfflineSyncProvider>
+import { OfflineSyncProvider } from "offline-sync";
+import { supabase } from "./lib/supabase";
+
+const tables = [
+  {
+    name: "tasks",
+    columns: `
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL
+    `
+  }
+];
+
+export default function App() {
+  return (
+    <OfflineSyncProvider supabaseClient={supabase} tables={tables}>
+      <YourApp />
+    </OfflineSyncProvider>
+  );
+}
 ```
 
-Provider lisää automaattisesti:
+The Provider automatically adds these system columns to every table:
 
-```
-created_at
-updated_at
-deleted_at
-version
-is_synced
-```
+- `created_at`
+- `updated_at`
+- `deleted_at`
+- `version`
+- `is_synced`
 
----
+## Defining tables
 
-## 4. Taulujen määrittely
+Tables are defined in JavaScript and must match the structure of your Supabase tables.
 
 ```ts
 {
   name: "tasks",
   columns: `
     id TEXT PRIMARY KEY,
-    title TEXT NOT NULL
+    title TEXT NOT NULL,
+    completed INTEGER DEFAULT 0
   `
 }
 ```
 
-Vaaditaan:
-- id
-- samat kentät Supabasessa
+**Requirements:**
+- Every table must have an `id` column as the primary key
+- The same columns must exist in your Supabase database
+- Use SQLite-compatible types (TEXT, INTEGER, REAL, BLOB)
 
----
-
-## 5. useOfflineFirst
+## Using `useOfflineFirst`
 
 ```ts
 const {
   data,
+  loading,
+  isOnline,
+  isSyncing,
+  pendingChanges,
+  pendingConflicts,
   create,
   update,
   remove,
   sync,
-  pendingChanges,
-  pendingConflicts,
-  syncState
-} = useOfflineFirst({ table: "tasks" });
+  refetch,
+} = useOfflineFirst<Task>({ 
+  table: "tasks",
+  orderBy: "created_at",
+  ascending: false,
+});
 ```
 
----
-
-## 6. Create
+### Creating records
 
 ```ts
-await create({ title: "Testi" });
+await create({ title: "New task" });
 ```
 
-→ SQLite  
-→ queue  
-→ sync  
+The record is saved to SQLite immediately, added to the sync queue, and pushed to Supabase if online.
 
----
-
-## 7. Update
+### Updating records
 
 ```ts
-await update(id, { title: "Uusi" });
+await update(id, { title: "Updated title" });
 ```
 
-→ base_version tallennetaan  
-→ konfliktit mahdollisia  
+The current `version` is stored as `base_version` in the queue. If the version on the server has changed since, a conflict is created.
 
----
-
-## 8. Delete
+### Deleting records
 
 ```ts
 await remove(id);
 ```
 
-→ soft delete (`deleted_at`)  
+This is a soft delete — the row is marked with `deleted_at` and synchronized as a deletion. The row is not physically removed from SQLite until the server confirms.
 
----
-
-## 9. Synkronointi
+### Manual synchronization
 
 ```ts
 await sync();
 ```
 
-Suorittaa:
-1. compactQueue  
-2. pushChanges  
-3. pullChanges  
+This runs the full sync cycle:
+1. Queue compaction (merges redundant operations)
+2. Push changes to Supabase
+3. Pull new changes from Supabase
 
----
+## RPC-based synchronization
 
-## 10. RPC-pohjainen synkronointi
+For tables where conflict detection is critical, enable RPC sync:
 
 ```ts
-useRpcSync: true
+useOfflineFirst({ 
+  table: "tasks",
+  useRpcSync: true,
+});
 ```
 
-Käyttää:
-```
-apply_sync_insert
-apply_sync_update
-```
+This requires Supabase RPC functions:
+- `apply_sync_insert(table, payload)`
+- `apply_sync_update(table, payload, base_version)`
 
----
+These functions validate version numbers on the server side and reject updates that are based on outdated versions.
 
-## 11. Supabase-vaatimukset
+## Supabase requirements
 
-```
+Every synchronized table must include:
+
+```sql
 id uuid primary key
-updated_at timestamptz
+created_at timestamptz not null default now()
+updated_at timestamptz not null default now()
 deleted_at timestamptz
-version integer
+version integer not null default 1
+last_client_operation_id text
 client_operation_id uuid
 ```
 
----
+## Conflict handling
 
-## 12. Konfliktimalli
-
-```
-local version ≠ remote version
-→ konflikti
-```
+A conflict occurs when local changes are based on a version that no longer matches the server version. Conflicts go through the following states:
 
 ```
 pending → resolving → resolved
+                   ↘ failed
 ```
 
----
+### Resolution strategies
 
-## 13. Konfliktistrategiat
+| Strategy | Description |
+|----------|-------------|
+| `server-wins` | Accept the server version as truth |
+| `client-wins` | Send the local version to the server via force-update RPC |
+| `manual-merge` | Apply a custom merged payload |
+| `mark-resolved` | Skip the conflict without making changes |
 
-- server-wins  
-- client-wins  
-- manual-merge  
-
-Manual merge EI käytä INSERT OR REPLACE  
-→ estää datan katoamisen  
-
----
-
-## 14. Konfliktien ratkaisu
+### Resolving conflicts
 
 ```ts
-resolveConflict(db, conflict, "server-wins");
+import { resolveConflict } from "offline-sync";
+
+await resolveConflict(db, conflict, "server-wins");
 ```
 
----
-
-## 15. useConflictHelpers
+Or use the React hook:
 
 ```ts
-resolve(conflict, "server");
-resolve(conflict, "client");
-merge(conflict, payload);
-ignore(conflict);
+const {
+  conflicts,
+  resolveServerWins,
+  resolveClientWins,
+  resolveManualMerge,
+} = useSyncConflicts({ table: "tasks", remoteResolver });
+
+await resolveServerWins(conflict);
 ```
 
----
+### Important: manual-merge does not use INSERT OR REPLACE
 
-## 16. Pull-suojaus
+The `manual-merge` strategy updates only the fields you provide, preserving fields that weren't included in the merge. This prevents accidental data loss when the merge payload is partial.
 
-```
-is_synced = 0 → ei overwritea
-```
+## Pull protection
 
----
+Records with `is_synced = 0` (unsynchronized local changes) are never overwritten by pull operations. This ensures that user changes are never lost when new data arrives from the server.
 
-## 17. Version hallinta
+## Version management
 
-```
-server omistaa version
-```
+The server owns the canonical version of every record. The library tracks versions to detect conflicts but does not generate or modify version numbers — that responsibility belongs to the server.
 
----
+## Queue compaction
 
-## 18. Queue compaction
+Before pushing to the server, the library compacts redundant operations:
 
 ```
-INSERT + UPDATE → INSERT
-UPDATE + UPDATE → UPDATE
-INSERT + DELETE → poistetaan
+INSERT + UPDATE → INSERT (with merged data)
+UPDATE + UPDATE → UPDATE (latest values)
+INSERT + DELETE → removed entirely
 ```
 
----
+This reduces network traffic and avoids race conditions on the server.
 
-## 19. Sync status
+## Sync states
 
-```
-idle | syncing | offline | error | conflict
-```
+The hook returns a sync state which can be one of:
 
----
+- `idle` — no operations in progress
+- `syncing` — sync currently running
+- `offline` — no network connection
+- `error` — sync failed
+- `conflict` — unresolved conflicts exist
 
-## 20. Verkkoyhteys
+## Network handling
 
-```
-offline → online → auto sync
-```
+The library automatically detects network state changes. When connectivity is restored, pending changes are pushed to the server automatically.
 
----
+## Retry logic
 
-## 21. Retry
+Failed sync operations are retried with exponential backoff. You can manually reset the retry counter for a specific conflict:
 
 ```ts
-resetRetry(conflict);
+await resetRetry(conflict);
 ```
 
----
+## Developer checklist
 
-## 22. Kehittäjän muistilista
+- ✅ Wrap your app with `OfflineSyncProvider`
+- ✅ Use `useOfflineFirst` for all data access
+- ✅ Avoid calling Supabase directly when working with synchronized tables
+- ✅ Include all required system columns in your Supabase tables
+- ✅ Use RPC sync for tables with strict conflict detection requirements
+- ✅ Handle conflicts in your UI when using `manual-merge`
 
-- Käytä Provideria  
-- Käytä useOfflineFirst  
-- Älä käytä suoraa Supabasea  
-- Lisää metadata Supabaseen  
-- Käytä RPC:tä  
-- Käsittele konfliktit UI:ssa  
+## Current limitations
 
----
+- The force-update RPC must be implemented manually for client-wins resolution
+- No built-in automatic merge — `manual-merge` requires a payload from your application
+- No UI components included — you build your own using the provided hooks
 
-## 23. Rajoitteet
+## Summary
 
-- force-update RPC puuttuu  
-- ei automaattista mergeä  
-- ei UI:ta mukana  
+`offline-sync` provides:
 
----
+- An offline-first data layer with SQLite
+- Reliable synchronization via a queue with retry logic
+- Conflict detection based on version numbers
+- Safe pull operations that never overwrite local changes
 
-## 24. Yhteenveto
-
-- offline-first data layer  
-- synkronointi queue + retry  
-- konfliktien hallinta  
-- turvallinen pull  
-
-👉 Sovellus toimii offline-tilassa ja säilyttää datan eheyden.
+Your application works offline and maintains data integrity across devices.

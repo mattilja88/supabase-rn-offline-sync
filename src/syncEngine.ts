@@ -16,10 +16,6 @@ interface SyncEngineOptions {
   conflictStrategy?: ConflictStrategy;
 }
 
-/**
- * Lukee jonorivin varsinaisen payloadin uudesta payload-kentästä tai vanhasta data-kentästä.
- * Tämä pitää synkronointimoottorin yhteensopivana myös vanhempien queue-rivien kanssa.
- */
 function parseQueuePayload(item: any): Record<string, any> {
   const rawPayload = item.payload ?? item.data;
 
@@ -30,10 +26,7 @@ function parseQueuePayload(item: any): Record<string, any> {
   return JSON.parse(rawPayload);
 }
 
-/**
- * Selvittää jonoriviin liittyvän varsinaisen rivin id:n.
- * row_id on ensisijainen lähde, mutta vanhoissa queue-riveissä id voidaan lukea payloadista.
- */
+
 function getQueueRowId(item: any, payload: Record<string, any>): string {
   const rowId = item.row_id ?? payload.id;
 
@@ -44,10 +37,6 @@ function getQueueRowId(item: any, payload: Record<string, any>): string {
   return rowId;
 }
 
-/**
- * Lähettää paikalliset jonossa olevat muutokset Supabaseen.
- * Funktio tukee sekä legacy-pohjaista synkronointia että optionaalista RPC-pohjaista synkronointia.
- */
 export async function pushChanges(
   db: SQLiteDatabase,
   supabase: SupabaseClient,
@@ -66,10 +55,6 @@ export async function pushChanges(
 
     try {
       let acceptedRemoteRow: Record<string, any> | null = null;
-      /**
-       * Ennen UPDATE- ja DELETE-operaatioita tarkistetaan, onko palvelimen versio muuttunut.
-       * Jos versio ei vastaa base_versionia, muutos käsitellään konfliktina eikä sitä pusheta hiljaisesti yli.
-       */
       if (item.operation === "UPDATE" || item.operation === "DELETE") {
         const conflictCheck = await hasVersionConflict(
           supabase,
@@ -95,10 +80,6 @@ export async function pushChanges(
         }
       }
 
-      /**
-       * INSERT-operaatio voidaan lähettää joko RPC:n kautta tai legacy upsert -toteutuksella.
-       * RPC-polku mahdollistaa idempotenssin client_operation_id:n avulla.
-       */
       if (item.operation === "INSERT") {
         if (options?.useRpc) {
           const { data, error } = await supabase.rpc("apply_sync_insert", {
@@ -110,10 +91,6 @@ export async function pushChanges(
 
           if (error) throw error;
 
-          /**
-           * RPC:n kannattaa palauttaa palvelimen hyväksymä rivi.
-           * Tällöin paikallinen kanta voidaan päivittää palvelimen versiolla.
-           */
           acceptedRemoteRow = data?.row ?? null;
         } else {
           const { data, error } = await supabase
@@ -127,10 +104,6 @@ export async function pushChanges(
           acceptedRemoteRow = data ?? null;
         }
       } else if (item.operation === "UPDATE") {
-        /**
-         * UPDATE-operaatio käyttää RPC:tä, jos se on otettu käyttöön.
-         * RPC tarkistaa version, päivittää datan atomisesti ja palauttaa mahdollisen konfliktin.
-         */
         if (options?.useRpc) {
           const rpcResult = await pushUpdateWithRpc(
             supabase,
@@ -163,7 +136,6 @@ export async function pushChanges(
             );
           }
 
-          // applied ja duplicate tulkitaan onnistuneiksi lopputiloiksi.
           acceptedRemoteRow = rpcResult.row ?? rpcResult.remote_row ?? null;
         } else {
           const { id, ...updates } = supabaseData;
@@ -180,10 +152,6 @@ export async function pushChanges(
           acceptedRemoteRow = data ?? null;
         }
       } else if (item.operation === "DELETE") {
-        /**
-         * DELETE-operaatio toteutetaan palvelimella soft deletenä.
-         * Riviä ei poisteta fyysisesti, vaan deleted_at asetetaan, jotta poisto voidaan replikoida hallitusti.
-         */
         const { data, error } = await supabase
           .from(table)
           .update({
@@ -198,18 +166,8 @@ export async function pushChanges(
         acceptedRemoteRow = data ?? null;
       }
 
-      /**
-       * Onnistunut operaatio poistetaan jonosta.
-       * Paikallinen rivi päivitetään ensisijaisesti palvelimen palauttamalla rivillä,
-       * jotta versionumeroa ei arvata clientissä.
-       */
       await removeFromQueue(db, item.id);
 
-      /**
-       * Paikallinen versionumero ei enää kasva clientissä.
-       * Jos palvelin palautti hyväksytyn rivin, tallennetaan se paikalliseen kantaan.
-       * Näin version, updated_at ja muu metadata pysyvät palvelimen kanssa samassa tilassa.
-       */
       if (acceptedRemoteRow) {
         const sqliteRow: Record<string, any> = {};
 
@@ -229,11 +187,6 @@ export async function pushChanges(
           await upsertFromRemote(db, table, sqliteRow);
         }
       } else {
-        /**
-         * Fallback:
-         * Jos palvelin ei palauttanut riviä, merkitään rivi synkronoiduksi,
-         * mutta versionumeroa EI arvata paikallisesti.
-         */
         await db.runAsync(
           `UPDATE ${table}
      SET is_synced = 1
@@ -249,10 +202,6 @@ export async function pushChanges(
         err,
       );
 
-      /**
-       * Epäonnistunut operaatio jätetään jonoon ja sille lasketaan retry/backoff-aika.
-       * Näin väliaikaiset virheet eivät poista käyttäjän paikallista muutosta.
-       */
       await markQueueItemFailed(db, item.id, err);
 
       return { pushed, failed: true };
@@ -262,10 +211,6 @@ export async function pushChanges(
   return { pushed, failed: false };
 }
 
-/**
- * Hakee palvelimelta yksittäisen rivin id:n perusteella.
- * Tätä käytetään konfliktitarkistuksessa, jotta voidaan verrata paikallisen muutoksen base_versionia palvelimen nykyiseen versioon.
- */
 async function getRemoteRow(
   supabase: SupabaseClient,
   table: string,
@@ -282,10 +227,6 @@ async function getRemoteRow(
   return data ?? null;
 }
 
-/**
- * Tarkistaa, onko paikallinen muutos tehty vanhentuneen version päälle.
- * Jos palvelimen version eroaa jonossa olevasta base_versionista, kyseessä on konflikti.
- */
 async function hasVersionConflict(
   supabase: SupabaseClient,
   table: string,
@@ -315,10 +256,6 @@ async function hasVersionConflict(
   };
 }
 
-/**
- * Lähettää UPDATE-operaation Supabasen RPC-funktiolle.
- * RPC tekee version tarkistuksen ja päivityksen palvelimella atomisesti.
- */
 async function pushUpdateWithRpc(
   supabase: SupabaseClient,
   table: string,
@@ -360,10 +297,6 @@ async function pushUpdateWithRpc(
   return data as any;
 }
 
-/**
- * Muuntaa paikallisen SQLite-datan Supabase-yhteensopivaan muotoon.
- * JSON-merkkijonot palautetaan array- tai object-muotoon ja sisäiset synkronointikentät voidaan tarvittaessa suodattaa pois.
- */
 function convertForSupabase(data: Record<string, any>): Record<string, any> {
   const converted: Record<string, any> = {};
 
@@ -385,11 +318,6 @@ function convertForSupabase(data: Record<string, any>): Record<string, any> {
   return converted;
 }
 
-/**
- * Hakee paikallisen rivin SQLite-tietokannasta id:n perusteella.
- * Tätä käytetään pull-vaiheessa tarkistamaan, onko rivillä paikallisia
- * synkronoimattomia muutoksia ennen kuin palvelimen versio tallennetaan paikalle.
- */
 async function getLocalRowForPullConflictCheck(
   db: SQLiteDatabase,
   table: string,
@@ -403,20 +331,12 @@ async function getLocalRowForPullConflictCheck(
   return row ?? null;
 }
 
-/**
- * Tarkistaa, onko paikallisella rivillä synkronoimattomia muutoksia.
- * Jos is_synced = 0, paikallista versiota ei saa ylikirjoittaa pull-vaiheessa.
- */
 function hasUnsyncedLocalChanges(
   localRow: Record<string, any> | null,
 ): boolean {
   return localRow?.is_synced === 0;
 }
 
-/**
- * Hakee palvelimelta viimeisimmän synkronoinnin jälkeen muuttuneet rivit.
- * Saadut rivit muunnetaan SQLite-yhteensopivaan muotoon ja tallennetaan paikalliseen tietokantaan.
- */
 export async function pullChanges(
   db: SQLiteDatabase,
   supabase: SupabaseClient,
@@ -460,13 +380,6 @@ export async function pullChanges(
 
       const localRow = await getLocalRowForPullConflictCheck(db, table, rowId);
 
-      /**
-       * Jos paikallisella rivillä on synkronoimattomia muutoksia,
-       * palvelimen versiota ei saa tallentaa suoraan paikallisen version päälle.
-       *
-       * Sen sijaan tallennetaan konflikti, jotta sovellus voi myöhemmin ratkaista,
-       * käytetäänkö paikallista versiota, palvelimen versiota vai yhdistettyä versiota.
-       */
       if (hasUnsyncedLocalChanges(localRow)) {
         await addConflict(db, {
           tableName: table,
@@ -498,10 +411,6 @@ export async function pullChanges(
   return { pulled, syncTimestamp };
 }
 
-/**
- * Suorittaa yhden taulun synkronoinnin kokonaisuudessaan.
- * Ensin pusketaan paikalliset muutokset palvelimelle ja sen jälkeen haetaan palvelimen uudet muutokset paikalliseen tietokantaan.
- */
 export async function syncTable(
   db: SQLiteDatabase,
   supabase: SupabaseClient,
@@ -525,10 +434,6 @@ export async function syncTable(
   };
 }
 
-/**
- * Käsittelee havaitun konfliktin valitun konfliktistrategian mukaisesti.
- * Strategiasta riippuen konflikti joko ratkaistaan palvelimen versiolla tai tallennetaan myöhempää manuaalista ratkaisua varten.
- */
 async function handleConflict(
   db: SQLiteDatabase,
   supabase: SupabaseClient,
@@ -563,10 +468,6 @@ async function handleConflict(
   }
 
   if (strategy === "client-wins") {
-    /**
-     * Nykyisessä toteutuksessa client-wins tallennetaan vielä konfliktina.
-     * Täysi client-wins vaatii myöhemmin erillisen force-update RPC:n, jotta palvelimen versio voidaan ylikirjoittaa turvallisesti.
-     */
     await addConflict(db, {
       tableName: table,
       rowId,

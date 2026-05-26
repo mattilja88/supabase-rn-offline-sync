@@ -1,0 +1,19 @@
+{
+  "name": "@oppari/offline-sync",
+  "version": "0.1.0",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "test": "jest"
+  },
+  "peerDependencies": {
+    "@react-native-community/netinfo": ">=11.0.0",
+    "@supabase/supabase-js": ">=2.0.0",
+    "expo-sqlite": ">=14.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "jest": "^30.3.0",
+    "ts-jest": "^29.4.9"
+  }
+}
